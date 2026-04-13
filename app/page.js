@@ -1,65 +1,236 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+'use client';
+
+import { useState, useRef, useCallback, useMemo } from 'react';
+import { useTodos } from '@/hooks/useTodos';
+import { useLists } from '@/hooks/useLists';
+import { useTheme } from '@/hooks/useTheme';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import { exportJSON, importJSON } from '@/lib/storage';
+import Sidebar from '@/components/Sidebar';
+import TodoInput from '@/components/TodoInput';
+import TodoList from '@/components/TodoList';
+import SearchBar from '@/components/SearchBar';
+import FilterBar from '@/components/FilterBar';
+import ProgressBar from '@/components/ProgressBar';
+import StatsBar from '@/components/StatsBar';
+import TaskModal from '@/components/TaskModal';
+import ConfettiCelebration from '@/components/ConfettiCelebration';
 
 export default function Home() {
+  const {
+    todos,
+    loaded,
+    stats,
+    addTodo,
+    updateTodo,
+    deleteTodo,
+    toggleTodo,
+    addSubtask,
+    toggleSubtask,
+    deleteSubtask,
+    reorderTodos,
+    clearCompleted,
+    importTodos,
+    getFilteredTodos,
+  } = useTodos();
+
+  const {
+    lists,
+    activeListId,
+    setActiveListId,
+    addList,
+    deleteList,
+  } = useLists();
+
+  const { theme, toggleTheme, mounted } = useTheme();
+
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [priorityFilter, setPriorityFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('created');
+  const [editingTodo, setEditingTodo] = useState(null);
+
+  const todoInputRef = useRef(null);
+  const searchRef = useRef(null);
+  const fileInputRef = useRef(null);
+
+  const filteredTodos = useMemo(
+    () => getFilteredTodos(activeListId, search, statusFilter, priorityFilter, categoryFilter, sortBy),
+    [getFilteredTodos, activeListId, search, statusFilter, priorityFilter, categoryFilter, sortBy]
+  );
+
+  const filteredStats = useMemo(() => {
+    const total = filteredTodos.length;
+    const completed = filteredTodos.filter((t) => t.completed).length;
+    return { total, completed, active: total - completed, percentage: total > 0 ? Math.round((completed / total) * 100) : 0 };
+  }, [filteredTodos]);
+
+  const allDone = filteredTodos.length > 0 && filteredTodos.every((t) => t.completed);
+
+  const handleExport = useCallback(() => {
+    exportJSON(todos, lists);
+  }, [todos, lists]);
+
+  const handleImport = useCallback(async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const data = await importJSON(file);
+      importTodos(data.todos);
+    } catch (err) {
+      alert(err.message);
+    }
+    e.target.value = '';
+  }, [importTodos]);
+
+  const handleCloseModal = useCallback(() => {
+    setEditingTodo(null);
+  }, []);
+
+  useKeyboardShortcuts({
+    onNewTask: () => {
+      document.getElementById('todo-input-field')?.focus();
+    },
+    onSearch: () => {
+      searchRef.current?.focus();
+    },
+    onCloseModal: handleCloseModal,
+    onExport: handleExport,
+    onToggleTheme: toggleTheme,
+  });
+
+  const activeList = lists.find((l) => l.id === activeListId);
+
+  if (!mounted || !loaded) {
+    return (
+      <div className="app-loading">
+        <div className="app-loading__spinner" />
+      </div>
+    );
+  }
+
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <div className="app">
+      <Sidebar
+        lists={lists}
+        activeListId={activeListId}
+        onSelectList={setActiveListId}
+        onAddList={addList}
+        onDeleteList={deleteList}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        stats={stats}
+      />
+
+      <main className="main">
+        <div className="main__header">
+          <div className="main__title-row">
+            <h2 className="main__title">
+              <span className="main__title-icon">{activeList?.icon}</span>
+              {activeList?.name || 'All Tasks'}
+            </h2>
+            <StatsBar stats={filteredStats} />
+          </div>
+
+          <div className="main__toolbar">
+            <SearchBar value={search} onChange={setSearch} inputRef={searchRef} />
+            <div className="main__actions">
+              <button className="main__action-btn" onClick={handleExport} title="Export (Ctrl+E)" id="export-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+              <button className="main__action-btn" onClick={() => fileInputRef.current?.click()} title="Import" id="import-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json"
+                onChange={handleImport}
+                style={{ display: 'none' }}
+                id="import-file-input"
+              />
+            </div>
+          </div>
+        </div>
+
+        <ProgressBar completed={filteredStats.completed} total={filteredStats.total} />
+
+        <TodoInput onAdd={addTodo} activeListId={activeListId} />
+
+        <FilterBar
+          statusFilter={statusFilter}
+          onStatusChange={setStatusFilter}
+          priorityFilter={priorityFilter}
+          onPriorityChange={setPriorityFilter}
+          categoryFilter={categoryFilter}
+          onCategoryChange={setCategoryFilter}
+          sortBy={sortBy}
+          onSortChange={setSortBy}
+          onClearCompleted={clearCompleted}
+          completedCount={filteredStats.completed}
         />
-        <div className={styles.intro}>
-          <h1>To get started, edit the page.js file.</h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+
+        <TodoList
+          todos={filteredTodos}
+          onToggle={toggleTodo}
+          onDelete={deleteTodo}
+          onEdit={setEditingTodo}
+          onReorder={reorderTodos}
+        />
+
+        <ConfettiCelebration trigger={allDone} />
+
+        {editingTodo && (
+          <TaskModal
+            todo={editingTodo}
+            onClose={handleCloseModal}
+            onUpdate={(id, updates) => {
+              updateTodo(id, updates);
+              setEditingTodo((prev) => (prev ? { ...prev, ...updates } : null));
+            }}
+            onAddSubtask={(todoId, title) => {
+              addSubtask(todoId, title);
+              // Refresh editing todo from state
+              setEditingTodo((prev) => {
+                if (!prev || prev.id !== todoId) return prev;
+                return {
+                  ...prev,
+                  subtasks: [
+                    ...prev.subtasks,
+                    { id: crypto.randomUUID(), title, completed: false },
+                  ],
+                };
+              });
+            }}
+            onToggleSubtask={(todoId, subtaskId) => {
+              toggleSubtask(todoId, subtaskId);
+              setEditingTodo((prev) => {
+                if (!prev || prev.id !== todoId) return prev;
+                return {
+                  ...prev,
+                  subtasks: prev.subtasks.map((s) =>
+                    s.id === subtaskId ? { ...s, completed: !s.completed } : s
+                  ),
+                };
+              });
+            }}
+            onDeleteSubtask={(todoId, subtaskId) => {
+              deleteSubtask(todoId, subtaskId);
+              setEditingTodo((prev) => {
+                if (!prev || prev.id !== todoId) return prev;
+                return {
+                  ...prev,
+                  subtasks: prev.subtasks.filter((s) => s.id !== subtaskId),
+                };
+              });
+            }}
+          />
+        )}
       </main>
     </div>
   );
