@@ -44,7 +44,7 @@ export default function Home() {
   } = useLists();
 
   const { theme, toggleTheme, mounted } = useTheme();
-  const { loadFromCloud, saveToCloud } = useBlobSync();
+  const { loadFromCloud, saveToCloud, syncStatus } = useBlobSync();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -58,15 +58,12 @@ export default function Home() {
   const searchRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  // Load from cloud on startup
+  // Load from cloud on startup — always prefer cloud data if it exists
   useEffect(() => {
     if (!loaded) return;
     loadFromCloud().then((cloudData) => {
-      if (cloudData && cloudData.todos) {
-        // Use cloud data if it has more todos than localStorage (simple merge)
-        if (cloudData.todos.length >= todos.length) {
-          importTodos(cloudData.todos);
-        }
+      if (cloudData && cloudData.todos && cloudData.todos.length > 0) {
+        importTodos(cloudData.todos);
       }
       setCloudLoaded(true);
     });
@@ -151,6 +148,11 @@ export default function Home() {
           <div className="main__title-row">
             <h2 className="main__title">
               {activeList?.name || 'All Tasks'}
+              <span className={`sync-dot sync-dot--${syncStatus}`} title={
+                syncStatus === 'saving' ? 'Syncing...' :
+                syncStatus === 'saved' ? 'Synced to cloud' :
+                syncStatus === 'error' ? 'Sync failed — check console' : ''
+              } />
             </h2>
             <StatsBar stats={filteredStats} />
           </div>

@@ -274,7 +274,19 @@ input, select, textarea { font-family: inherit; font-size: inherit; color: var(-
 
 .main__header { width: 100%; max-width: 640px; margin-bottom: 24px; }
 .main__title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-.main__title { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.04em; }
+.main__title { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.04em; display: flex; align-items: center; gap: 8px; }
+
+/* Sync indicator */
+.sync-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  display: inline-block;
+  transition: background 0.3s ease, opacity 0.3s ease;
+  opacity: 0;
+}
+.sync-dot--saving { opacity: 1; background: var(--priority-medium); animation: pulse 1s ease infinite; }
+.sync-dot--saved { opacity: 1; background: var(--priority-low); }
+.sync-dot--error { opacity: 1; background: var(--priority-high); }
+@keyframes pulse { 0%,100%{opacity:0.4} 50%{opacity:1} }
 
 .main__toolbar { display: flex; align-items: center; gap: 8px; }
 .main__actions { display: flex; gap: 4px; }
