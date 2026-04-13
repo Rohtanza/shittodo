@@ -22,7 +22,7 @@ export function useLists() {
     const newList = {
       id: crypto.randomUUID(),
       name,
-      icon: '📁',
+      icon: 'folder',
       isDefault: false,
     };
     setCustomLists((prev) => [...prev, newList]);

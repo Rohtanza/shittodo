@@ -150,7 +150,6 @@ export default function Home() {
         <div className="main__header">
           <div className="main__title-row">
             <h2 className="main__title">
-              <span className="main__title-icon">{activeList?.icon}</span>
               {activeList?.name || 'All Tasks'}
             </h2>
             <StatsBar stats={filteredStats} />
