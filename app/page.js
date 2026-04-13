@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useRef, useCallback, useMemo } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { useTodos } from '@/hooks/useTodos';
 import { useLists } from '@/hooks/useLists';
 import { useTheme } from '@/hooks/useTheme';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import { useBlobSync } from '@/hooks/useBlobSync';
 import { exportJSON, importJSON } from '@/lib/storage';
 import Sidebar from '@/components/Sidebar';
 import TodoInput from '@/components/TodoInput';
@@ -43,6 +44,7 @@ export default function Home() {
   } = useLists();
 
   const { theme, toggleTheme, mounted } = useTheme();
+  const { loadFromCloud, saveToCloud } = useBlobSync();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -50,10 +52,31 @@ export default function Home() {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [sortBy, setSortBy] = useState('created');
   const [editingTodo, setEditingTodo] = useState(null);
+  const [cloudLoaded, setCloudLoaded] = useState(false);
 
   const todoInputRef = useRef(null);
   const searchRef = useRef(null);
   const fileInputRef = useRef(null);
+
+  // Load from cloud on startup
+  useEffect(() => {
+    if (!loaded) return;
+    loadFromCloud().then((cloudData) => {
+      if (cloudData && cloudData.todos) {
+        // Use cloud data if it has more todos than localStorage (simple merge)
+        if (cloudData.todos.length >= todos.length) {
+          importTodos(cloudData.todos);
+        }
+      }
+      setCloudLoaded(true);
+    });
+  }, [loaded]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sync to cloud on every change
+  useEffect(() => {
+    if (!cloudLoaded) return;
+    saveToCloud(todos, lists);
+  }, [todos, lists, cloudLoaded, saveToCloud]);
 
   const filteredTodos = useMemo(
     () => getFilteredTodos(activeListId, search, statusFilter, priorityFilter, categoryFilter, sortBy),
