@@ -1,0 +1,6 @@
+sudo apt remove shittodo
+
+cd /home/rohtanza/Desktop/work/shittodo
+npm run tauri:build -- --bundles deb
+
+sudo apt install ./src-tauri/target/release/bundle/deb/ShitTodo_0.1.0_amd64.deb

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { flushAll } from '@/lib/flushRegistry';
 
 export default function TitleBar() {
   const [isTauri, setIsTauri] = useState(false);
@@ -43,8 +44,11 @@ export default function TitleBar() {
   };
 
   const handleClose = async () => {
+    // Drain any pending debounced writes to localStorage before the webview
+    // tears down. beforeunload/pagehide are unreliable inside Tauri.
+    flushAll();
     const { getCurrentWindow } = await import('@tauri-apps/api/window');
-    await getCurrentWindow().close();
+    await getCurrentWindow().destroy();
   };
 
   return (

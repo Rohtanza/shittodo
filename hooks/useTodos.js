@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { loadTodos, saveTodos } from '@/lib/storage';
 import { PRIORITY_ORDER } from '@/lib/constants';
 import { LIMITS, clampString } from '@/lib/validation';
+import { registerFlush } from '@/lib/flushRegistry';
 
 const SAVE_DEBOUNCE_MS = 200;
 
@@ -38,31 +39,16 @@ export function useTodos() {
     };
     window.addEventListener('beforeunload', flush);
     window.addEventListener('pagehide', flush);
-
-    // Tauri window close doesn't reliably fire beforeunload/pagehide,
-    // so we also subscribe to the native close event and flush synchronously.
-    let unlistenTauri;
-    const inTauri =
-      typeof window !== 'undefined' &&
-      ('__TAURI_INTERNALS__' in window || '__TAURI__' in window);
-    if (inTauri) {
-      (async () => {
-        try {
-          const { getCurrentWindow } = await import('@tauri-apps/api/window');
-          unlistenTauri = await getCurrentWindow().onCloseRequested(() => {
-            flush();
-          });
-        } catch {
-          // ignore – fall back to the web listeners above
-        }
-      })();
-    }
+    // The titlebar close button (and any future "quit" UI) calls flushAll()
+    // synchronously before closing, so unsaved typing survives a window close
+    // even when beforeunload/pagehide don't fire reliably (e.g. Tauri).
+    const unregister = registerFlush(flush);
 
     return () => {
       flush();
       window.removeEventListener('beforeunload', flush);
       window.removeEventListener('pagehide', flush);
-      if (typeof unlistenTauri === 'function') unlistenTauri();
+      unregister();
     };
   }, []);
 
