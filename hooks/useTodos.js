@@ -38,10 +38,31 @@ export function useTodos() {
     };
     window.addEventListener('beforeunload', flush);
     window.addEventListener('pagehide', flush);
+
+    // Tauri window close doesn't reliably fire beforeunload/pagehide,
+    // so we also subscribe to the native close event and flush synchronously.
+    let unlistenTauri;
+    const inTauri =
+      typeof window !== 'undefined' &&
+      ('__TAURI_INTERNALS__' in window || '__TAURI__' in window);
+    if (inTauri) {
+      (async () => {
+        try {
+          const { getCurrentWindow } = await import('@tauri-apps/api/window');
+          unlistenTauri = await getCurrentWindow().onCloseRequested(() => {
+            flush();
+          });
+        } catch {
+          // ignore – fall back to the web listeners above
+        }
+      })();
+    }
+
     return () => {
       flush();
       window.removeEventListener('beforeunload', flush);
       window.removeEventListener('pagehide', flush);
+      if (typeof unlistenTauri === 'function') unlistenTauri();
     };
   }, []);
 
@@ -75,7 +96,28 @@ export function useTodos() {
   }, []);
 
   const deleteTodo = useCallback((id) => {
-    setTodos((prev) => prev.filter((t) => t.id !== id));
+    let snapshot = null;
+    setTodos((prev) => {
+      const index = prev.findIndex((t) => t.id === id);
+      if (index === -1) return prev;
+      snapshot = { todo: prev[index], index };
+      const next = prev.slice();
+      next.splice(index, 1);
+      return next;
+    });
+    return snapshot;
+  }, []);
+
+  const restoreTodo = useCallback((todo, index) => {
+    if (!todo) return;
+    setTodos((prev) => {
+      if (prev.some((t) => t.id === todo.id)) return prev;
+      const insertAt =
+        typeof index === 'number' ? Math.max(0, Math.min(index, prev.length)) : 0;
+      const next = prev.slice();
+      next.splice(insertAt, 0, todo);
+      return next;
+    });
   }, []);
 
   const toggleTodo = useCallback((id) => {
@@ -139,8 +181,30 @@ export function useTodos() {
     );
   }, []);
 
-  const reorderTodos = useCallback((reorderedTodos) => {
-    setTodos(reorderedTodos);
+  // Receives the new order of IDs for the *visible* subset and splices them
+  // into the full todos array while preserving the position of any todo that
+  // is currently hidden by search/filter/list. Passing the already-filtered
+  // list directly into setTodos would delete everything not visible.
+  const reorderTodos = useCallback((visibleIdsInNewOrder) => {
+    if (!Array.isArray(visibleIdsInNewOrder) || visibleIdsInNewOrder.length === 0) return;
+    setTodos((prev) => {
+      const byId = new Map(prev.map((t) => [t.id, t]));
+      const visibleSet = new Set(visibleIdsInNewOrder);
+      for (const id of visibleIdsInNewOrder) {
+        if (!byId.has(id)) return prev;
+      }
+      const result = new Array(prev.length);
+      let cursor = 0;
+      for (let i = 0; i < prev.length; i++) {
+        if (visibleSet.has(prev[i].id)) {
+          const nextId = visibleIdsInNewOrder[cursor++];
+          result[i] = byId.get(nextId);
+        } else {
+          result[i] = prev[i];
+        }
+      }
+      return result;
+    });
   }, []);
 
   const clearCompleted = useCallback(() => {
@@ -149,6 +213,16 @@ export function useTodos() {
 
   const importTodos = useCallback((importedTodos) => {
     setTodos(importedTodos);
+  }, []);
+
+  const reassignListTodos = useCallback((fromListId, toListId = 'all') => {
+    setTodos((prev) =>
+      prev.map((t) => (t.listId === fromListId ? { ...t, listId: toListId } : t))
+    );
+  }, []);
+
+  const deleteTodosInList = useCallback((listId) => {
+    setTodos((prev) => prev.filter((t) => t.listId !== listId));
   }, []);
 
   const mergeTodos = useCallback((importedTodos) => {
@@ -245,11 +319,14 @@ export function useTodos() {
     addTodo,
     updateTodo,
     deleteTodo,
+    restoreTodo,
     toggleTodo,
     addSubtask,
     toggleSubtask,
     deleteSubtask,
     reorderTodos,
+    reassignListTodos,
+    deleteTodosInList,
     clearCompleted,
     importTodos,
     mergeTodos,

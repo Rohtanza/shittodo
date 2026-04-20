@@ -27,11 +27,14 @@ export default function Home() {
     addTodo,
     updateTodo,
     deleteTodo,
+    restoreTodo,
     toggleTodo,
     addSubtask,
     toggleSubtask,
     deleteSubtask,
     reorderTodos,
+    reassignListTodos,
+    deleteTodosInList,
     clearCompleted,
     importTodos,
     mergeTodos,
@@ -44,6 +47,9 @@ export default function Home() {
     setActiveListId,
     addList,
     deleteList,
+    importLists,
+    mergeLists,
+    loaded: listsLoaded,
   } = useLists();
 
   const { theme, toggleTheme, mounted } = useTheme();
@@ -57,6 +63,7 @@ export default function Home() {
   const [editingTodo, setEditingTodo] = useState(null);
   const [pendingImport, setPendingImport] = useState(null);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [pendingListDelete, setPendingListDelete] = useState(null);
 
   const searchRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -128,6 +135,60 @@ export default function Home() {
     });
   }, [clearCompleted, filteredStats.completed, showToast]);
 
+  const handleDeleteTodo = useCallback(
+    (id) => {
+      const snapshot = deleteTodo(id);
+      if (!snapshot || !snapshot.todo) return;
+      const title = snapshot.todo.title || 'Task';
+      const shortTitle = title.length > 40 ? `${title.slice(0, 40)}…` : title;
+      showToast({
+        variant: 'info',
+        message: `Deleted “${shortTitle}”.`,
+        duration: 6000,
+        action: {
+          label: 'Undo',
+          onClick: () => restoreTodo(snapshot.todo, snapshot.index),
+        },
+      });
+    },
+    [deleteTodo, restoreTodo, showToast]
+  );
+
+  const handleRequestDeleteList = useCallback(
+    (id) => {
+      const list = lists.find((l) => l.id === id);
+      if (!list || list.isDefault) return;
+      const count = todos.filter((t) => t.listId === id).length;
+      setPendingListDelete({ id, name: list.name, count });
+    },
+    [lists, todos]
+  );
+
+  const confirmDeleteList = useCallback(
+    (action) => {
+      if (!pendingListDelete) return;
+      const { id, name, count } = pendingListDelete;
+      if (action === 'delete-tasks') {
+        deleteTodosInList(id);
+      } else {
+        reassignListTodos(id, 'all');
+      }
+      deleteList(id);
+      setPendingListDelete(null);
+      showToast({
+        variant: 'success',
+        message:
+          count === 0
+            ? `Deleted list “${name}”.`
+            : action === 'delete-tasks'
+              ? `Deleted list “${name}” and ${count} task${count === 1 ? '' : 's'}.`
+              : `Deleted list “${name}”. ${count} task${count === 1 ? ' was' : 's were'} moved to All Tasks.`,
+        duration: 4000,
+      });
+    },
+    [pendingListDelete, deleteList, reassignListTodos, deleteTodosInList, showToast]
+  );
+
   useKeyboardShortcuts({
     onNewTask: () => {
       document.getElementById('todo-input-field')?.focus();
@@ -142,7 +203,7 @@ export default function Home() {
 
   const activeList = lists.find((l) => l.id === activeListId);
 
-  if (!mounted || !loaded) {
+  if (!mounted || !loaded || !listsLoaded) {
     return (
       <div className="app-loading">
         <div className="app-loading__spinner" />
@@ -153,14 +214,18 @@ export default function Home() {
   const doReplaceImport = () => {
     if (!pendingImport) return;
     importTodos(pendingImport.todos);
-    const { acceptedCount, rawCount } = pendingImport;
+    importLists(pendingImport.lists);
+    const { acceptedCount, rawCount, lists: importedLists } = pendingImport;
     const skipped = rawCount - acceptedCount;
+    const listCount = Array.isArray(importedLists) ? importedLists.length : 0;
     setPendingImport(null);
+    const taskPart = skipped > 0
+      ? `${acceptedCount} tasks (${skipped} skipped as invalid)`
+      : `${acceptedCount} tasks`;
+    const listPart = listCount > 0 ? ` and ${listCount} list${listCount === 1 ? '' : 's'}` : '';
     showToast({
       variant: 'success',
-      message: skipped > 0
-        ? `Imported ${acceptedCount} tasks (${skipped} skipped as invalid).`
-        : `Imported ${acceptedCount} tasks.`,
+      message: `Imported ${taskPart}${listPart}.`,
       duration: 4000,
     });
   };
@@ -168,10 +233,13 @@ export default function Home() {
   const doMergeImport = () => {
     if (!pendingImport) return;
     mergeTodos(pendingImport.todos);
+    mergeLists(pendingImport.lists);
+    const listCount = Array.isArray(pendingImport.lists) ? pendingImport.lists.length : 0;
+    const listPart = listCount > 0 ? ` and ${listCount} list${listCount === 1 ? '' : 's'}` : '';
     setPendingImport(null);
     showToast({
       variant: 'success',
-      message: `Merged ${pendingImport.acceptedCount} tasks.`,
+      message: `Merged ${pendingImport.acceptedCount} tasks${listPart}.`,
       duration: 3000,
     });
   };
@@ -183,7 +251,7 @@ export default function Home() {
         activeListId={activeListId}
         onSelectList={setActiveListId}
         onAddList={addList}
-        onDeleteList={deleteList}
+        onDeleteList={handleRequestDeleteList}
         theme={theme}
         onToggleTheme={toggleTheme}
         stats={stats}
@@ -243,7 +311,7 @@ export default function Home() {
         <TodoList
           todos={filteredTodos}
           onToggle={toggleTodo}
-          onDelete={deleteTodo}
+          onDelete={handleDeleteTodo}
           onEdit={setEditingTodo}
           onReorder={reorderTodos}
         />
@@ -318,6 +386,40 @@ export default function Home() {
           variant="danger"
           onConfirm={confirmClearCompleted}
           onCancel={() => setConfirmClear(false)}
+        />
+
+        <ConfirmDialog
+          open={!!pendingListDelete}
+          title={pendingListDelete ? `Delete list “${pendingListDelete.name}”?` : ''}
+          message={
+            pendingListDelete
+              ? pendingListDelete.count === 0
+                ? 'This list is empty. It will be removed.'
+                : `This list contains ${pendingListDelete.count} task${pendingListDelete.count === 1 ? '' : 's'}. Choose what to do with them.`
+              : ''
+          }
+          confirmLabel={
+            pendingListDelete && pendingListDelete.count > 0
+              ? 'Move tasks to All Tasks'
+              : 'Delete list'
+          }
+          cancelLabel="Cancel"
+          variant={pendingListDelete && pendingListDelete.count === 0 ? 'danger' : 'default'}
+          extraAction={
+            pendingListDelete && pendingListDelete.count > 0
+              ? {
+                  label: `Delete list and ${pendingListDelete.count} task${pendingListDelete.count === 1 ? '' : 's'}`,
+                  onClick: () => confirmDeleteList('delete-tasks'),
+                  variant: 'danger',
+                }
+              : null
+          }
+          onConfirm={() =>
+            confirmDeleteList(
+              pendingListDelete && pendingListDelete.count > 0 ? 'move-tasks' : 'move-tasks'
+            )
+          }
+          onCancel={() => setPendingListDelete(null)}
         />
       </main>
     </div>

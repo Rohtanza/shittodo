@@ -46,7 +46,7 @@ That's fine for this scale, but it means you get zero benefit from Next.js RSC. 
 # 2. Security & Privacy
 
 ### Critical — Leaked Vercel Blob token in git history
-`.env.local` was committed with `BLOB_READ_WRITE_TOKEN=vercel_blob_rw_pgw1DiR1s9quP5dH_C4whZ38j8SWGkHOIuNJe9oNbGCDQof`. I deleted the file, but **git history still contains it**. Anyone with clone access (if the repo is ever made public or leaked) can use that token to read/write your blob store. Action: rotate the token in the Vercel dashboard today. If the repo was ever pushed somewhere public, consider `git filter-repo` to scrub history too.
+`.env.local` was committed with `BLOB_READ_WRITE_TOKEN=<REDACTED — rotate in Vercel>`. I deleted the file, but **git history still contains the original literal**. Anyone with clone access (if the repo is ever made public or leaked) can use that token to read/write your blob store. Action: rotate the token in the Vercel dashboard today. If the repo was ever pushed somewhere public, run `git filter-repo --replace-text` against the original literal to scrub history, then force-push.
 
 ### High — Tauri CSP is disabled (`"csp": null`)
 [src-tauri/tauri.conf.json:24](src-tauri/tauri.conf.json). For a pure-local app this is low real-world risk (no remote content loaded), but it means if a future dependency or a future you accidentally inlines remote scripts, nothing blocks it. Recommended minimum for production build:

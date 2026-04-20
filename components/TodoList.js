@@ -35,10 +35,10 @@ export default function TodoList({ todos, onToggle, onDelete, onEdit, onReorder 
 
     if (oldIndex === -1 || newIndex === -1) return;
 
-    const reordered = [...todos];
-    const [moved] = reordered.splice(oldIndex, 1);
-    reordered.splice(newIndex, 0, moved);
-    onReorder(reordered);
+    const reorderedIds = todos.map((t) => t.id);
+    const [movedId] = reorderedIds.splice(oldIndex, 1);
+    reorderedIds.splice(newIndex, 0, movedId);
+    onReorder(reorderedIds);
   };
 
   if (todos.length === 0) {

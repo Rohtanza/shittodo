@@ -9,6 +9,7 @@ export default function ConfirmDialog({
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
   variant = 'default',
+  extraAction = null,
   onConfirm,
   onCancel,
 }) {
@@ -49,7 +50,7 @@ export default function ConfirmDialog({
       >
         <h2 id="confirm-title" className="confirm__title">{title}</h2>
         {message && <p className="confirm__message">{message}</p>}
-        <div className="confirm__actions">
+        <div className={`confirm__actions ${extraAction ? 'confirm__actions--triple' : ''}`}>
           <button
             type="button"
             className="confirm__btn confirm__btn--secondary"
@@ -57,6 +58,15 @@ export default function ConfirmDialog({
           >
             {cancelLabel}
           </button>
+          {extraAction && (
+            <button
+              type="button"
+              className={`confirm__btn ${extraAction.variant === 'danger' ? 'confirm__btn--danger' : 'confirm__btn--secondary'}`}
+              onClick={extraAction.onClick}
+            >
+              {extraAction.label}
+            </button>
+          )}
           <button
             ref={confirmRef}
             type="button"

@@ -81,7 +81,7 @@ export default function Sidebar({
             onClick={onToggleTheme}
             aria-label="Toggle theme"
             id="theme-toggle"
-            title="Ctrl+D"
+            title="Toggle theme (Ctrl+Shift+D)"
           >
             {theme === 'light' ? (
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -178,6 +178,12 @@ export default function Sidebar({
           </div>
           <div className="sidebar__shortcuts">
             <span className="shortcut-hint">Ctrl+F</span> Search
+          </div>
+          <div className="sidebar__shortcuts">
+            <span className="shortcut-hint">Ctrl+E</span> Export
+          </div>
+          <div className="sidebar__shortcuts">
+            <span className="shortcut-hint">Ctrl+Shift+D</span> Theme
           </div>
         </div>
       </aside>
