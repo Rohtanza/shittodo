@@ -1,6 +1,19 @@
 'use client';
 
 import { FILTER_STATUS, SORT_OPTIONS, DEFAULT_CATEGORIES } from '@/lib/constants';
+import Select from './Select';
+
+const PRIORITY_OPTIONS = [
+  { value: 'all', label: 'All Priorities' },
+  { value: 'high', label: 'High' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'low', label: 'Low' },
+];
+
+const CATEGORY_OPTIONS = [
+  { value: 'all', label: 'All Categories' },
+  ...DEFAULT_CATEGORIES.map((cat) => ({ value: cat, label: cat })),
+];
 
 export default function FilterBar({
   statusFilter,
@@ -29,40 +42,32 @@ export default function FilterBar({
       </div>
 
       <div className="filter-bar__group filter-bar__selects">
-        <select
+        <Select
           value={priorityFilter}
-          onChange={(e) => onPriorityChange(e.target.value)}
+          onChange={onPriorityChange}
+          options={PRIORITY_OPTIONS}
           className="filter-bar__select"
           id="priority-filter"
-        >
-          <option value="all">All Priorities</option>
-          <option value="high">High</option>
-          <option value="medium">Medium</option>
-          <option value="low">Low</option>
-        </select>
+          ariaLabel="Filter by priority"
+        />
 
-        <select
+        <Select
           value={categoryFilter}
-          onChange={(e) => onCategoryChange(e.target.value)}
+          onChange={onCategoryChange}
+          options={CATEGORY_OPTIONS}
           className="filter-bar__select"
           id="category-filter"
-        >
-          <option value="all">All Categories</option>
-          {DEFAULT_CATEGORIES.map((cat) => (
-            <option key={cat} value={cat}>{cat}</option>
-          ))}
-        </select>
+          ariaLabel="Filter by category"
+        />
 
-        <select
+        <Select
           value={sortBy}
-          onChange={(e) => onSortChange(e.target.value)}
+          onChange={onSortChange}
+          options={SORT_OPTIONS}
           className="filter-bar__select"
           id="sort-select"
-        >
-          {SORT_OPTIONS.map((s) => (
-            <option key={s.value} value={s.value}>{s.label}</option>
-          ))}
-        </select>
+          ariaLabel="Sort"
+        />
       </div>
 
       {completedCount > 0 && (

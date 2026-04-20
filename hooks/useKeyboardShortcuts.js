@@ -31,7 +31,7 @@ export function useKeyboardShortcuts({ onNewTask, onSearch, onCloseModal, onExpo
         onExport?.();
       }
 
-      if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'D' || e.key === 'd')) {
         e.preventDefault();
         onToggleTheme?.();
       }

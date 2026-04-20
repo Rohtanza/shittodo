@@ -5,8 +5,7 @@ import { useTodos } from '@/hooks/useTodos';
 import { useLists } from '@/hooks/useLists';
 import { useTheme } from '@/hooks/useTheme';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
-import { useBlobSync } from '@/hooks/useBlobSync';
-import { exportJSON, importJSON } from '@/lib/storage';
+import { exportJSON, importJSON, setStorageErrorHandler } from '@/lib/storage';
 import Sidebar from '@/components/Sidebar';
 import TodoInput from '@/components/TodoInput';
 import TodoList from '@/components/TodoList';
@@ -16,6 +15,9 @@ import ProgressBar from '@/components/ProgressBar';
 import StatsBar from '@/components/StatsBar';
 import TaskModal from '@/components/TaskModal';
 import ConfettiCelebration from '@/components/ConfettiCelebration';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import ImportDialog from '@/components/ImportDialog';
+import { useToast } from '@/components/Toast';
 
 export default function Home() {
   const {
@@ -32,6 +34,7 @@ export default function Home() {
     reorderTodos,
     clearCompleted,
     importTodos,
+    mergeTodos,
     getFilteredTodos,
   } = useTodos();
 
@@ -44,7 +47,7 @@ export default function Home() {
   } = useLists();
 
   const { theme, toggleTheme, mounted } = useTheme();
-  const { loadFromCloud, saveToCloud, syncStatus } = useBlobSync();
+  const { showToast } = useToast();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -52,28 +55,31 @@ export default function Home() {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [sortBy, setSortBy] = useState('created');
   const [editingTodo, setEditingTodo] = useState(null);
-  const [cloudLoaded, setCloudLoaded] = useState(false);
+  const [pendingImport, setPendingImport] = useState(null);
+  const [confirmClear, setConfirmClear] = useState(false);
 
-  const todoInputRef = useRef(null);
   const searchRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  // Load from cloud on startup — always prefer cloud data if it exists
   useEffect(() => {
-    if (!loaded) return;
-    loadFromCloud().then((cloudData) => {
-      if (cloudData && cloudData.todos && cloudData.todos.length > 0) {
-        importTodos(cloudData.todos);
+    setStorageErrorHandler(({ op, error }) => {
+      const isQuota = error && (error.name === 'QuotaExceededError' || /quota/i.test(error.message || ''));
+      if (isQuota) {
+        showToast({
+          variant: 'error',
+          message: 'Local storage is full. Changes may not be saved. Try exporting and clearing old tasks.',
+          duration: 8000,
+        });
+      } else if (op === 'save-todos' || op === 'save-lists') {
+        showToast({
+          variant: 'error',
+          message: 'Failed to save changes to local storage.',
+          duration: 6000,
+        });
       }
-      setCloudLoaded(true);
     });
-  }, [loaded]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Sync to cloud on every change
-  useEffect(() => {
-    if (!cloudLoaded) return;
-    saveToCloud(todos, lists);
-  }, [todos, lists, cloudLoaded, saveToCloud]);
+    return () => setStorageErrorHandler(null);
+  }, [showToast]);
 
   const filteredTodos = useMemo(
     () => getFilteredTodos(activeListId, search, statusFilter, priorityFilter, categoryFilter, sortBy),
@@ -86,27 +92,41 @@ export default function Home() {
     return { total, completed, active: total - completed, percentage: total > 0 ? Math.round((completed / total) * 100) : 0 };
   }, [filteredTodos]);
 
-  const allDone = filteredTodos.length > 0 && filteredTodos.every((t) => t.completed);
-
   const handleExport = useCallback(() => {
     exportJSON(todos, lists);
-  }, [todos, lists]);
+    showToast({ variant: 'success', message: 'Backup exported.', duration: 2500 });
+  }, [todos, lists, showToast]);
 
   const handleImport = useCallback(async (e) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
     try {
       const data = await importJSON(file);
-      importTodos(data.todos);
+      setPendingImport(data);
     } catch (err) {
-      alert(err.message);
+      showToast({ variant: 'error', message: err.message || 'Import failed', duration: 5000 });
     }
-    e.target.value = '';
-  }, [importTodos]);
+  }, [showToast]);
 
   const handleCloseModal = useCallback(() => {
     setEditingTodo(null);
   }, []);
+
+  const handleClearCompleted = useCallback(() => {
+    setConfirmClear(true);
+  }, []);
+
+  const confirmClearCompleted = useCallback(() => {
+    const count = filteredStats.completed;
+    clearCompleted();
+    setConfirmClear(false);
+    showToast({
+      variant: 'success',
+      message: count === 1 ? 'Cleared 1 completed task.' : `Cleared ${count} completed tasks.`,
+      duration: 2500,
+    });
+  }, [clearCompleted, filteredStats.completed, showToast]);
 
   useKeyboardShortcuts({
     onNewTask: () => {
@@ -130,6 +150,32 @@ export default function Home() {
     );
   }
 
+  const doReplaceImport = () => {
+    if (!pendingImport) return;
+    importTodos(pendingImport.todos);
+    const { acceptedCount, rawCount } = pendingImport;
+    const skipped = rawCount - acceptedCount;
+    setPendingImport(null);
+    showToast({
+      variant: 'success',
+      message: skipped > 0
+        ? `Imported ${acceptedCount} tasks (${skipped} skipped as invalid).`
+        : `Imported ${acceptedCount} tasks.`,
+      duration: 4000,
+    });
+  };
+
+  const doMergeImport = () => {
+    if (!pendingImport) return;
+    mergeTodos(pendingImport.todos);
+    setPendingImport(null);
+    showToast({
+      variant: 'success',
+      message: `Merged ${pendingImport.acceptedCount} tasks.`,
+      duration: 3000,
+    });
+  };
+
   return (
     <div className="app">
       <Sidebar
@@ -148,11 +194,6 @@ export default function Home() {
           <div className="main__title-row">
             <h2 className="main__title">
               {activeList?.name || 'All Tasks'}
-              <span className={`sync-dot sync-dot--${syncStatus}`} title={
-                syncStatus === 'saving' ? 'Syncing...' :
-                syncStatus === 'saved' ? 'Synced to cloud' :
-                syncStatus === 'error' ? 'Sync failed — check console' : ''
-              } />
             </h2>
             <StatsBar stats={filteredStats} />
           </div>
@@ -195,7 +236,7 @@ export default function Home() {
           onCategoryChange={setCategoryFilter}
           sortBy={sortBy}
           onSortChange={setSortBy}
-          onClearCompleted={clearCompleted}
+          onClearCompleted={handleClearCompleted}
           completedCount={filteredStats.completed}
         />
 
@@ -207,7 +248,10 @@ export default function Home() {
           onReorder={reorderTodos}
         />
 
-        <ConfettiCelebration trigger={allDone} />
+        <ConfettiCelebration
+          activeCount={stats.active}
+          total={stats.total}
+        />
 
         {editingTodo && (
           <TaskModal
@@ -219,7 +263,6 @@ export default function Home() {
             }}
             onAddSubtask={(todoId, title) => {
               addSubtask(todoId, title);
-              // Refresh editing todo from state
               setEditingTodo((prev) => {
                 if (!prev || prev.id !== todoId) return prev;
                 return {
@@ -255,6 +298,27 @@ export default function Home() {
             }}
           />
         )}
+
+        <ImportDialog
+          open={!!pendingImport}
+          importedCount={pendingImport?.acceptedCount ?? 0}
+          skippedCount={pendingImport ? pendingImport.rawCount - pendingImport.acceptedCount : 0}
+          currentCount={stats.total}
+          onReplace={doReplaceImport}
+          onMerge={doMergeImport}
+          onCancel={() => setPendingImport(null)}
+        />
+
+        <ConfirmDialog
+          open={confirmClear}
+          title="Clear completed tasks?"
+          message={`This will permanently delete ${filteredStats.completed} completed task${filteredStats.completed === 1 ? '' : 's'}. This cannot be undone.`}
+          confirmLabel={`Clear ${filteredStats.completed}`}
+          cancelLabel="Cancel"
+          variant="danger"
+          onConfirm={confirmClearCompleted}
+          onCancel={() => setConfirmClear(false)}
+        />
       </main>
     </div>
   );

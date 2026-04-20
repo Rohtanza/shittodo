@@ -1,10 +1,7 @@
-import { Inter } from "next/font/google";
+import "@fontsource-variable/inter";
 import "./globals.css";
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-});
+import TitleBar from "@/components/TitleBar";
+import { ToastProvider } from "@/components/Toast";
 
 export const metadata = {
   title: "ShitTodo — Get Stuff Done",
@@ -14,8 +11,13 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={inter.className} data-theme="light" suppressHydrationWarning>
-      <body>{children}</body>
+    <html lang="en" data-theme="light" suppressHydrationWarning>
+      <body>
+        <ToastProvider>
+          <TitleBar />
+          {children}
+        </ToastProvider>
+      </body>
     </html>
   );
 }

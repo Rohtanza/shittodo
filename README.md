@@ -1,38 +1,122 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ShitTodo
 
-## Getting Started
+A minimalist todo app. Runs as both a Next.js web app (dev) and a Tauri v2 desktop app (Linux + Windows).
 
-First, run the development server:
+## Stack
+
+- Next.js 16 (App Router) with `output: 'export'` for static builds
+- React 19
+- Tauri v2 (Rust) for the desktop wrapper
+- `localStorage` for persistence (offline, local-only)
+
+## UI scale
+
+The app renders with `zoom: 1.4` on `body` to match a larger-text preference.
+If you prefer 100%, edit the `zoom` value in `app/globals.css` (search for `zoom: 1.4`).
+
+## Data storage
+
+All data lives in the webview's `localStorage`, which on Linux is an
+unencrypted LevelDB under
+`~/.local/share/com.shittodo.desktop/.../Local Storage/leveldb/`. Treat it like
+any other plaintext config file: don't paste credentials, and back up with the
+built-in Export button before major changes.
+
+## Windows SmartScreen note
+
+The installer is currently unsigned. On first launch Windows will show
+"Windows protected your PC" — click **More info → Run anyway**. A signed build
+will ship once an OV/EV code-signing certificate is in place.
+
+## Web dev
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev         # Next.js dev server on http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Desktop dev
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+Requires Rust and system libs. One-time Kubuntu / Debian setup:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+sudo apt update && sudo apt install -y \
+  libwebkit2gtk-4.1-dev \
+  build-essential \
+  curl \
+  wget \
+  file \
+  libxdo-dev \
+  libssl-dev \
+  libayatana-appindicator3-dev \
+  librsvg2-dev
 
-## Learn More
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
+```
 
-To learn more about Next.js, take a look at the following resources:
+Then:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run tauri:dev   # launches Next.js + native window
+npm run tauri:build # builds installers for current OS
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Build output locations
 
-## Deploy on Vercel
+After `npm run tauri:build`:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- Linux: `src-tauri/target/release/bundle/deb/*.deb`, `src-tauri/target/release/bundle/appimage/*.AppImage`
+- Windows: `src-tauri/target/release/bundle/nsis/*-setup.exe`, `src-tauri/target/release/bundle/msi/*.msi`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-# shittodo
-# shittodo
+## Cross-compiling a Windows `.exe` from Kubuntu
+
+**Strongly recommended: use GitHub Actions** (see `.github/workflows/release.yml`). NSIS and MSI bundlers do not run reliably under wine; the CI runner gets you a real Windows build.
+
+Tag a release to trigger it:
+
+```bash
+git tag v0.1.0
+git push --tags
+```
+
+This builds `.deb` + AppImage on an `ubuntu-22.04` runner and `.exe` + `.msi` on a `windows-latest` runner, then attaches both sets of artifacts to a draft GitHub Release.
+
+### Alternative: cargo-xwin (Rust-only .exe, no installer)
+
+If you just want a raw `.exe` for testing on Linux:
+
+```bash
+cargo install cargo-xwin
+rustup target add x86_64-pc-windows-msvc
+npx tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc --bundles none
+```
+
+Output: `src-tauri/target/x86_64-pc-windows-msvc/release/app.exe`. This is just the binary — no installer, no code signing, no icon resource unless you wire it up manually. Good for a quick functional smoke test, not for distribution.
+
+## Tauri plugins (not installed yet — reference)
+
+If you later need native capabilities, these are the Tauri v2 plugins to add:
+
+- `@tauri-apps/plugin-opener` — open external URLs / files with the OS default app
+- `@tauri-apps/plugin-dialog` — native open / save file dialogs
+- `@tauri-apps/plugin-fs` — read / write files on disk
+- `@tauri-apps/plugin-store` — key-value store (survives app reinstall on Windows, unlike webview localStorage)
+- `@tauri-apps/plugin-http` — fetch-like API that bypasses CORS
+- `@tauri-apps/plugin-clipboard-manager` — system clipboard
+- `@tauri-apps/plugin-notification` — native notifications
+
+Each plugin requires (a) `cargo add tauri-plugin-<name>` in `src-tauri/`, (b) a `.plugin(tauri_plugin_<name>::init())` call in `src-tauri/src/lib.rs`, (c) `npm install @tauri-apps/plugin-<name>`, and (d) an entry in `src-tauri/capabilities/default.json`.
+
+## Project layout
+
+```
+app/               Next.js App Router routes (client-only)
+components/        React components
+hooks/             React hooks
+lib/               Storage + utility modules
+public/            Static assets
+out/               Static export output (generated by `npm run build`)
+src-tauri/         Tauri Rust project + tauri.conf.json
+.github/workflows/ CI
+```

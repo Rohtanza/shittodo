@@ -2,6 +2,14 @@
 
 import { useState, useRef } from 'react';
 import { DEFAULT_CATEGORIES, PRIORITIES } from '@/lib/constants';
+import { LIMITS } from '@/lib/validation';
+import Select from './Select';
+import DatePicker from './DatePicker';
+
+const CATEGORY_OPTIONS = [
+  { value: '', label: 'None' },
+  ...DEFAULT_CATEGORIES.map((cat) => ({ value: cat, label: cat })),
+];
 
 export default function TodoInput({ onAdd, activeListId }) {
   const [title, setTitle] = useState('');
@@ -41,6 +49,7 @@ export default function TodoInput({ onAdd, activeListId }) {
           ref={inputRef}
           type="text"
           value={title}
+          maxLength={LIMITS.TITLE_MAX}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="What needs to be done?"
           className="todo-input__field"
@@ -83,27 +92,24 @@ export default function TodoInput({ onAdd, activeListId }) {
 
           <div className="todo-input__option-group">
             <label className="todo-input__label">Category</label>
-            <select
+            <Select
               value={category}
-              onChange={(e) => setCategory(e.target.value)}
+              onChange={setCategory}
+              options={CATEGORY_OPTIONS}
               className="todo-input__select"
               id="todo-category-select"
-            >
-              <option value="">None</option>
-              {DEFAULT_CATEGORIES.map((cat) => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </select>
+              ariaLabel="Category"
+            />
           </div>
 
           <div className="todo-input__option-group">
             <label className="todo-input__label">Due Date</label>
-            <input
-              type="date"
+            <DatePicker
               value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
+              onChange={setDueDate}
               className="todo-input__date"
               id="todo-date-input"
+              ariaLabel="Due date"
             />
           </div>
         </div>
